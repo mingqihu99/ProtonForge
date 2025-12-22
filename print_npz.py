@@ -19,7 +19,8 @@ def main():
         description="Print shapes and first N elements of arrays in .npz or .npy files."
     )
     parser.add_argument("file", help="Path to .npz or .npy file")
-    parser.add_argument("--max", "-m", type=int, default=1000, help="Max elements to print per array (default 1000)")
+    parser.add_argument("--max", "-m", type=int, default=1000,
+                        help="Max elements to print per array (default 1000)")
     args = parser.parse_args()
 
     file_path = args.file

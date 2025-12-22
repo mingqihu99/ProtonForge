@@ -17,7 +17,7 @@ import re
 import ast
 import numpy as np
 import sys
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any
 
 
 DTYPE_MAP = {
@@ -40,14 +40,15 @@ SPEC_RE = re.compile(r"^(?P<dtype>[a-z0-9]+)\[(?P<shape>[0-9,\s]+)\](?:\((?P<con
                      re.IGNORECASE)
 
 
-def parse_spec(spec: str) -> Tuple[np.dtype, Tuple[int, ...], Optional[object]]:
+def parse_spec(spec: str):
     m = SPEC_RE.match(spec.strip())
     if not m:
         raise ValueError(f"Invalid spec: '{spec}'")
 
     dtype_key = m.group('dtype').lower()
     if dtype_key not in DTYPE_MAP:
-        raise ValueError(f"Unknown dtype '{dtype_key}' in spec '{spec}'. Supported: {', '.join(DTYPE_MAP.keys())}")
+        raise ValueError(
+            f"Unknown dtype '{dtype_key}' in spec '{spec}'. Supported: {', '.join(DTYPE_MAP.keys())}")
     dtype = DTYPE_MAP[dtype_key]
 
     shape_str = m.group('shape')
@@ -87,7 +88,7 @@ def random_array(dtype: np.dtype, shape: Tuple[int, ...], rng: np.random.Generat
         raise ValueError(f"Unsupported dtype kind '{kind}'")
 
 
-def cast_const_to_dtype(val, dtype: np.dtype):
+def cast_const_to_dtype(val: Any, dtype: np.dtype) -> Any:
     # handle booleans
     if np.dtype(dtype).kind == 'b':
         if isinstance(val, str):
@@ -108,11 +109,15 @@ def cast_const_to_dtype(val, dtype: np.dtype):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Generate .npz files from concise specs")
+    parser = argparse.ArgumentParser(
+        description="Generate .npz files from concise specs")
     parser.add_argument('out', help='Output .npz path')
-    parser.add_argument('specs', nargs='+', help="One or more specs like s32[10,20](1) or f32[5]")
-    parser.add_argument('--names', help='Comma-separated variable names (optional)')
-    parser.add_argument('--seed', type=int, default=None, help='Random seed (optional)')
+    parser.add_argument('specs', nargs='+',
+                        help="One or more specs like s32[10,20](1) or f32[5]")
+    parser.add_argument(
+        '--names', help='Comma-separated variable names (optional)')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Random seed (optional)')
 
     args = parser.parse_args(argv)
 
@@ -138,12 +143,14 @@ def main(argv=None):
             try:
                 cast_val = cast_const_to_dtype(const_val, dtype)
             except Exception as e:
-                raise SystemExit(f"Cannot cast constant '{const_val}' to dtype {dtype}: {e}")
+                raise SystemExit(
+                    f"Cannot cast constant '{const_val}' to dtype {dtype}: {e}")
             arr = np.full(shape, cast_val, dtype=dtype)
 
         varname = names[i] if names is not None else f'arr{i}'
         arrays[varname] = arr
-        print(f"Prepared `{varname}`: spec={spec}, dtype={arr.dtype}, shape={arr.shape}")
+        print(
+            f"Prepared `{varname}`: spec={spec}, dtype={arr.dtype}, shape={arr.shape}")
 
     # Save to npz
     try:

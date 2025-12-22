@@ -20,7 +20,7 @@ import argparse
 import os
 import numpy as np
 import textwrap
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 
 
 def load_arrays(path: str) -> List[Tuple[str, np.ndarray]]:
@@ -42,7 +42,8 @@ def load_arrays(path: str) -> List[Tuple[str, np.ndarray]]:
         except Exception as e:
             raise RuntimeError(f"Failed to load '{path}': {e}")
     else:
-        raise RuntimeError(f"Unsupported extension '{ext}'; expected .npz or .npy")
+        raise RuntimeError(
+            f"Unsupported extension '{ext}'; expected .npz or .npy")
 
 
 def format_elem(x, dtype):
@@ -84,7 +85,7 @@ def near(a: float, b: float, atol: float = 1e-8, rtol: float = 1e-5) -> bool:
     return abs(a - b) < atol + rtol * abs(b)
 
 
-def compare_arrays(golden: np.ndarray, test: np.ndarray, max_print: int = 20, eps: float = 1e-12, atol: float = 1e-8, rtol: float = 1e-5):
+def compare_arrays(golden: np.ndarray, test: np.ndarray, max_print: int = 20, eps: float = 1e-12, atol: float = 1e-8, rtol: float = 1e-5) -> Dict[str, Any]:
     """Compare two arrays and return a summary dict."""
     # check shape
     if golden.shape != test.shape:
@@ -99,7 +100,7 @@ def compare_arrays(golden: np.ndarray, test: np.ndarray, max_print: int = 20, ep
             atol = 1e-5
             rtol = 1e-5
 
-    info = {}
+    info: Dict[str, Any] = {}
     info['dtype_golden'] = golden.dtype
     info['dtype_test'] = test.dtype
     info['shape'] = golden.shape
@@ -113,7 +114,8 @@ def compare_arrays(golden: np.ndarray, test: np.ndarray, max_print: int = 20, ep
     m = min(max_print, n)
     preview = []
     for i in range(m):
-        preview.append((format_elem(g_flat[i], golden.dtype), format_elem(t_flat[i], test.dtype)))
+        preview.append(
+            (format_elem(g_flat[i], golden.dtype), format_elem(t_flat[i], test.dtype)))
 
     info['preview'] = preview
     info['preview_count'] = m
@@ -122,7 +124,7 @@ def compare_arrays(golden: np.ndarray, test: np.ndarray, max_print: int = 20, ep
     kind_g = np.dtype(golden.dtype).kind
     kind_t = np.dtype(test.dtype).kind
 
-    numeric_kinds = set(['f','i','u','b'])
+    numeric_kinds = set(['f', 'i', 'u', 'b'])
 
     if (kind_g in numeric_kinds) and (kind_t in numeric_kinds):
         # compute using float64 for safety
@@ -138,7 +140,8 @@ def compare_arrays(golden: np.ndarray, test: np.ndarray, max_print: int = 20, ep
         mre = float(np.mean(rel)) if rel.size else float('nan')
         max_rel = float(np.max(rel)) if rel.size else float('nan')
 
-        info.update({'ok': True, 'mae': mae, 'max_abs': max_abs, 'mre': mre, 'max_rel': max_rel})
+        info.update({'ok': True, 'mae': mae, 'max_abs': max_abs,
+                    'mre': mre, 'max_rel': max_rel})
 
         # top-k largest absolute errors (default 5)
         k = min(5, n)
@@ -146,10 +149,12 @@ def compare_arrays(golden: np.ndarray, test: np.ndarray, max_print: int = 20, ep
             idxs = np.argsort(-abs_err)[:k]
             topk = []
             for idx in idxs:
-                multi_idx = tuple(int(x) for x in np.unravel_index(int(idx), golden.shape))
+                multi_idx = tuple(int(x)
+                                  for x in np.unravel_index(int(idx), golden.shape))
                 g_s = format_elem(g_flat[int(idx)], golden.dtype)
                 t_s = format_elem(t_flat[int(idx)], test.dtype)
-                topk.append({'flat_index': int(idx), 'index': multi_idx, 'golden': g_s, 'test': t_s, 'abs_err': float(abs_err[int(idx)]), 'rel_err': float(rel[int(idx)])})
+                topk.append({'flat_index': int(idx), 'index': multi_idx, 'golden': g_s, 'test': t_s, 'abs_err': float(
+                    abs_err[int(idx)]), 'rel_err': float(rel[int(idx)])})
             info['topk'] = topk
             # compute top-k relative errors (ignore non-finite relative errors)
             rel_mask = np.isfinite(rel)
@@ -160,10 +165,12 @@ def compare_arrays(golden: np.ndarray, test: np.ndarray, max_print: int = 20, ep
                 for idx in ridxs:
                     if not rel_mask[int(idx)]:
                         continue
-                    multi_idx = tuple(int(x) for x in np.unravel_index(int(idx), golden.shape))
+                    multi_idx = tuple(
+                        int(x) for x in np.unravel_index(int(idx), golden.shape))
                     g_s = format_elem(g_flat[int(idx)], golden.dtype)
                     t_s = format_elem(t_flat[int(idx)], test.dtype)
-                    topk_rel.append({'flat_index': int(idx), 'index': multi_idx, 'golden': g_s, 'test': t_s, 'abs_err': float(abs_err[int(idx)]), 'rel_err': float(rel[int(idx)])})
+                    topk_rel.append({'flat_index': int(idx), 'index': multi_idx, 'golden': g_s, 'test': t_s, 'abs_err': float(
+                        abs_err[int(idx)]), 'rel_err': float(rel[int(idx)])})
                 info['topk_rel'] = topk_rel
             else:
                 info['topk_rel'] = []
@@ -179,12 +186,13 @@ def compare_arrays(golden: np.ndarray, test: np.ndarray, max_print: int = 20, ep
         info['rtol'] = rtol
     else:
         # non-numeric comparison: not supported
-        raise RuntimeError(f"Non-numeric dtypes not supported: golden={golden.dtype}, test={test.dtype}")
+        raise RuntimeError(
+            f"Non-numeric dtypes not supported: golden={golden.dtype}, test={test.dtype}")
 
     return info
 
 
-def print_comparison(index: int, name_g: str, name_t: str, result: dict):
+def print_comparison(index: int, name_g: str, name_t: str, result: Dict[str, Any]):
     print(f"=== Array #{index} ===")
     if name_g == name_t:
         print(f"Name: {name_g}")
@@ -196,7 +204,8 @@ def print_comparison(index: int, name_g: str, name_t: str, result: dict):
         print()
         return
 
-    print(f"Shape: {result['shape']} | dtype(golden)={result['dtype_golden']} dtype(test)={result['dtype_test']}")
+    print(
+        f"Shape: {result['shape']} | dtype(golden)={result['dtype_golden']} dtype(test)={result['dtype_test']}")
 
     # print preview side-by-side
     m = result.get('preview_count', 0)
@@ -213,23 +222,27 @@ def print_comparison(index: int, name_g: str, name_t: str, result: dict):
         # print top-k largest absolute errors if available
         if 'topk' in result and result['topk']:
             print()
-            print('Top {} largest absolute errors:'.format(len(result['topk'])))
+            print('Top {} largest absolute errors:'.format(
+                len(result['topk'])))
             for item in result['topk']:
                 idx = item['index']
                 flat = item['flat_index']
                 abs_s = format_number(item['abs_err'])
                 rel_s = format_number(item['rel_err'])
-                print(f"Index {flat} {idx}: {item['golden']} -> {item['test']} | abs_err={abs_s} | rel_err={rel_s}")
+                print(
+                    f"Index {flat} {idx}: {item['golden']} -> {item['test']} | abs_err={abs_s} | rel_err={rel_s}")
         # print top-k largest relative errors if available
         if 'topk_rel' in result and result['topk_rel']:
             print()
-            print('Top {} largest relative errors:'.format(len(result['topk_rel'])))
+            print('Top {} largest relative errors:'.format(
+                len(result['topk_rel'])))
             for item in result['topk_rel']:
                 idx = item['index']
                 flat = item['flat_index']
                 abs_s = format_number(item['abs_err'])
                 rel_s = format_number(item['rel_err'])
-                print(f"Index {flat} {idx}: {item['golden']} -> {item['test']} | abs_err={abs_s} | rel_err={rel_s}")
+                print(
+                    f"Index {flat} {idx}: {item['golden']} -> {item['test']} | abs_err={abs_s} | rel_err={rel_s}")
         print()
         print(f"Mean absolute error (MAE): {result['mae']}")
         print(f"Max absolute error: {result['max_abs']}")
@@ -240,21 +253,28 @@ def print_comparison(index: int, name_g: str, name_t: str, result: dict):
         atol = result.get('atol', 1e-8)
         rtol = result.get('rtol', 1e-5)
         if pass_rate == 100.0:
-            print(f"Pass rate: PASS (using |test - golden| < {atol} + {rtol} * |golden|)")
+            print(
+                f"Pass rate: PASS (using |test - golden| < {atol} + {rtol} * |golden|)")
         else:
-            print(f"Pass rate: {pass_rate:.2f}% (using |test - golden| < {atol} + {rtol} * |golden|)")
+            print(
+                f"Pass rate: {pass_rate:.2f}% (using |test - golden| < {atol} + {rtol} * |golden|)")
 
     print()
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Compare two .npz/.npy files (golden first)')
+    parser = argparse.ArgumentParser(
+        description='Compare two .npz/.npy files (golden first)')
     parser.add_argument('golden', help='Golden/reference .npz or .npy file')
     parser.add_argument('test', help='Test .npz or .npy file to compare')
-    parser.add_argument('--max', '-m', type=int, default=20, help='Number of elements to print per array (default 20)')
-    parser.add_argument('--eps', type=float, default=1e-12, help='Epsilon added to denominator for relative error')
-    parser.add_argument('--atol', type=float, default=1e-8, help='Absolute tolerance for near check (default 1e-8)')
-    parser.add_argument('--rtol', type=float, default=1e-5, help='Relative tolerance for near check (default 1e-5)')
+    parser.add_argument('--max', '-m', type=int, default=20,
+                        help='Number of elements to print per array (default 20)')
+    parser.add_argument('--eps', type=float, default=1e-12,
+                        help='Epsilon added to denominator for relative error')
+    parser.add_argument('--atol', type=float, default=1e-8,
+                        help='Absolute tolerance for near check (default 1e-8)')
+    parser.add_argument('--rtol', type=float, default=1e-5,
+                        help='Relative tolerance for near check (default 1e-5)')
 
     args = parser.parse_args()
 
@@ -272,13 +292,15 @@ def main():
 
     count = min(len(gold_list), len(test_list))
     if len(gold_list) != len(test_list):
-        print(f"Warning: different number of arrays: golden={len(gold_list)} test={len(test_list)}. Comparing first {count} arrays.")
+        print(
+            f"Warning: different number of arrays: golden={len(gold_list)} test={len(test_list)}. Comparing first {count} arrays.")
 
     for i in range(count):
         name_g, arr_g = gold_list[i]
         name_t, arr_t = test_list[i]
         try:
-            res = compare_arrays(arr_g, arr_t, max_print=args.max, eps=args.eps, atol=args.atol, rtol=args.rtol)
+            res = compare_arrays(
+                arr_g, arr_t, max_print=args.max, eps=args.eps, atol=args.atol, rtol=args.rtol)
         except Exception as e:
             res = {'ok': False, 'reason': f'exception during compare: {e}'}
         print_comparison(i, name_g, name_t, res)
