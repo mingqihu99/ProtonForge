@@ -5,10 +5,10 @@ A collection of utilities for generating and comparing NumPy .npz/.npy files.
 ## Synopsis
 
 ### compare_npz.py
-compare_npz.py GOLDEN_FILE TEST_FILE [OPTIONS]
+```python compare_npz.py GOLDEN_FILE TEST_FILE [OPTIONS]```
 
 ### generate_npz.py
-generate_npz.py OUTPUT_FILE SPEC [SPEC ...] [OPTIONS]
+```python generate_npz.py OUTPUT_FILE SPEC [SPEC ...] [OPTIONS]```
 
 ## Description
 
@@ -20,14 +20,14 @@ This tool contains Python scripts for working with NumPy array files (.npz and .
 
 ## Options
 
-### compare_npz.py Options
+### compare_npz.py options
 - `-m, --max N` Number of elements to print per array (default 20)
 - `--eps FLOAT` Epsilon added to denominator for relative error (default 1e-12)
 - `--atol FLOAT` Absolute tolerance for near check (default 1e-8, auto-adjusted for fp16/fp32)
 - `--rtol FLOAT` Relative tolerance for near check (default 1e-5, auto-adjusted for fp16/fp32)
 - `-h, --help` Show help message and exit
 
-### generate_npz.py Options
+### generate_npz.py options
 - `--names NAME1,NAME2,...` Variable names for arrays (default: arr0, arr1, ...)
 - `--seed N` Random seed for reproducible random arrays
 - `-h, --help` Show help message and exit
@@ -36,19 +36,17 @@ This tool contains Python scripts for working with NumPy array files (.npz and .
 
 ### Compare two .npz files
 ```
-python compare_npz.py golden.npz test.npz
+python compare_npz.py golden.npz test.npz  # use default atol, rtol
 ```
 
 ### Compare with custom tolerances
 ```
-python compare_npz.py golden.npz test.npz --atol 1e-6 --rtol 1e-4
+python compare_npz.py golden.npz test.npz --atol 1e-5 --rtol 1e-5
+OR
+python compare_npz.py golden.npz test.npz --atol 1e-5  # means rtol is zero, only cares atol
 ```
-Note: for fp16/fp32 dtype, atol/rtol option will be overrided
 
 #### Sample Output
-```
-python compare_npz.py golden.npz test.npz
-```
 Output:
 ```
 === Array #0 ===
@@ -76,6 +74,12 @@ Max absolute error: 0.000099
 Mean relative error (MRE): 5e-07
 Max relative error: 1e-06
 Pass rate: PASS (using |test - golden| < 1e-05 + 1e-05 * |golden|)
+```
+
+### Library usage in python
+```
+from compare_npz import allclose
+allclose("golden.npz", "test.npz", 1e-5)
 ```
 
 ### Generate a .npz file with multiple arrays

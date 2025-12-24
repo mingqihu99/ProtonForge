@@ -1,0 +1,14 @@
+[tool.autopep8]
+indent-size = 2
+max_line-length = 88
+aggressive = 2
+
+[tool.ruff]
+select = ["Q"]
+line-length = 88
+fix = true
+
+[tool.ruff.flake8-quotes]
+inline-quotes = "double"
+multiline-quotes = "double"
+docstring-quotes = "double"
