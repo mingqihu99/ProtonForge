@@ -87,7 +87,21 @@ allclose("golden.npz", "test.npz", 1e-5)
 python generate_npz.py output.npz f32[1024,512](0.0) s32[256](1) u8[64,64]
 ```
 
+### Generate a .npz file with given range
+```
+python generate_npz.py output.npz f32[10](-1.5,1.5)
+```
+
 ### Generate with custom names
 ```
 python generate_npz.py data.npz f32[100](0.5) f16[50] --names input_0,input_1
+```
+
+### Library usage in python
+```
+from generate_npz import generate_npz
+specs = ("f32[1024,512](-1,1)", "s32[256](1)", "u8[64,64]")
+output_path = "test_output.npz"
+names = ("a", "b", "c")
+generate_npz(specs, output_path, names=names)
 ```

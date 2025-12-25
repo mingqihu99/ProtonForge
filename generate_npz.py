@@ -4,6 +4,7 @@
 Spec format examples:
   s32[2048,16,128](1)   -> int32 array shape (2048,16,128) filled with 1
   f32[10](0.5)          -> float32 vector of length 10 filled with 0.5
+  f32[10](-1.5,1.5)     -> float32 random array in range [-1.5, 1.5]
   u8[64,64]             -> uint8 random array shape (64,64)
 
 CLI:
@@ -36,8 +37,9 @@ DTYPE_MAP = {
     "bool": np.bool_,
 }
 
-SPEC_RE = re.compile(r"^(?P<dtype>[a-z0-9]+)\[(?P<shape>[0-9,\s]+)\](?:\((?P<const>.*)\))?$",
-                     re.IGNORECASE)
+SPEC_RE = re.compile(
+    r"^(?P<dtype>[a-z0-9]+)\[(?P<shape>[0-9,\s]+)\](?:\((?P<const>.*)\))?$",
+    re.IGNORECASE)
 
 
 def parse_spec(spec: str):
@@ -70,17 +72,29 @@ def parse_spec(spec: str):
   return dtype, shape, const_val
 
 
-def random_array(dtype: np.dtype, shape: Tuple[int, ...], rng: np.random.Generator):
+def random_array(dtype: np.dtype, shape: Tuple[int, ...], rng: np.random.Generator,
+                 low: Optional[float] = None, high: Optional[float] = None):
   kind = np.dtype(dtype).kind
   if kind in ("i", "u"):
     info = np.iinfo(dtype)
-    # choose a reasonably sized range to avoid huge strings but full dtype range for uint is ok
-    low = max(info.min, -1000) if kind == "i" else 0
-    high = min(info.max, 1000) if info.max > 1000 else info.max
-    if low >= high:
-      low, high = info.min, info.max
-    return rng.integers(low, high + 1, size=shape, dtype=dtype)
+    if low is None:
+      low = max(info.min, -1000)
+    if high is None:
+      high = min(info.max, 1000)
+
+    # Clip to dtype range
+    l_val = int(max(info.min, low))
+    h_val = int(min(info.max, high))
+
+    if l_val > h_val:
+      raise ValueError(f"Invalid range [{low}, {high}] for dtype {dtype}")
+
+    return rng.integers(l_val, h_val, size=shape, dtype=dtype, endpoint=True)
   elif kind == "f":
+    if low is not None and high is not None:
+      if low > high:
+        raise ValueError(f"Invalid range [{low}, {high}] for float generation")
+      return rng.uniform(low, high, size=shape).astype(dtype)
     return rng.standard_normal(size=shape).astype(dtype)
   elif kind == "b":
     return rng.integers(0, 2, size=shape, dtype=np.uint8).astype(bool)
@@ -108,9 +122,10 @@ def cast_const_to_dtype(val: Any, dtype: np.dtype) -> Any:
     return dtype.type(float(val))
 
 
-def generate_npz(specs: Tuple[str, ...], output_path: str, names: Optional[Tuple[str, ...]] = None, seed: Optional[int] = None):
+def generate_npz(specs: Tuple[str, ...], output_path: str,
+                 names: Optional[Tuple[str, ...]] = None, seed: Optional[int] = None):
   """Generate and save NPZ file from specs.
-  
+
   Args:
     specs: Tuple of spec strings.
     output_path: Path to save the .npz file.
@@ -118,7 +133,8 @@ def generate_npz(specs: Tuple[str, ...], output_path: str, names: Optional[Tuple
     seed: Optional random seed.
   """
   if names is not None and len(names) != len(specs):
-    raise ValueError(f"Number of names ({len(names)}) must match number of specs ({len(specs)})")
+    raise ValueError(
+        f"Number of names ({len(names)}) must match number of specs ({len(specs)})")
 
   rng = np.random.default_rng(seed)
 
@@ -131,7 +147,15 @@ def generate_npz(specs: Tuple[str, ...], output_path: str, names: Optional[Tuple
 
     if const_val is None:
       arr = random_array(dtype, shape, rng)
+    elif isinstance(const_val, (tuple, list)) and len(const_val) == 2:
+      # Use as range (min, max)
+      try:
+        arr = random_array(dtype, shape, rng, low=const_val[0], high=const_val[1])
+      except Exception as e:
+        raise ValueError(
+            f"Error generating random range {const_val} for spec '{spec}': {e}")
     else:
+      # Use as constant
       try:
         cast_val = cast_const_to_dtype(const_val, dtype)
       except Exception as e:
