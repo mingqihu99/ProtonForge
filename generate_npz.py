@@ -108,6 +108,47 @@ def cast_const_to_dtype(val: Any, dtype: np.dtype) -> Any:
     return dtype.type(float(val))
 
 
+def generate_npz(specs: Tuple[str, ...], output_path: str, names: Optional[Tuple[str, ...]] = None, seed: Optional[int] = None):
+  """Generate and save NPZ file from specs.
+  
+  Args:
+    specs: Tuple of spec strings.
+    output_path: Path to save the .npz file.
+    names: Optional tuple of variable names.
+    seed: Optional random seed.
+  """
+  if names is not None and len(names) != len(specs):
+    raise ValueError(f"Number of names ({len(names)}) must match number of specs ({len(specs)})")
+
+  rng = np.random.default_rng(seed)
+
+  arrays = {}
+  for i, spec in enumerate(specs):
+    try:
+      dtype, shape, const_val = parse_spec(spec)
+    except Exception as e:
+      raise ValueError(f"Error parsing spec #{i} '{spec}': {e}")
+
+    if const_val is None:
+      arr = random_array(dtype, shape, rng)
+    else:
+      try:
+        cast_val = cast_const_to_dtype(const_val, dtype)
+      except Exception as e:
+        raise ValueError(f"Cannot cast constant '{const_val}' to dtype {dtype}: {e}")
+      arr = np.full(shape, cast_val, dtype=dtype)
+
+    varname = names[i] if names is not None else f"arr{i}"
+    arrays[varname] = arr
+    print(f"Prepared `{varname}`: spec={spec}, dtype={arr.dtype}, shape={arr.shape}")
+
+  try:
+    np.savez(output_path, **arrays)
+    print(f"Saved {len(arrays)} arrays to '{output_path}'")
+  except Exception as e:
+    raise RuntimeError(f"Failed saving to '{output_path}': {e}")
+
+
 def main(argv=None):
   parser = argparse.ArgumentParser(
       description="Generate .npz files from concise specs")
@@ -123,41 +164,12 @@ def main(argv=None):
 
   names = None
   if args.names:
-    names = [n.strip() for n in args.names.split(",") if n.strip()]
-    if len(names) != len(args.specs):
-      raise SystemExit("Number of names must match number of specs")
+    names = tuple(n.strip() for n in args.names.split(",") if n.strip())
 
-  rng = np.random.default_rng(args.seed)
-
-  arrays = {}
-  for i, spec in enumerate(args.specs):
-    try:
-      dtype, shape, const_val = parse_spec(spec)
-    except Exception as e:
-      raise SystemExit(f"Error parsing spec #{i} '{spec}': {e}")
-
-    if const_val is None:
-      arr = random_array(dtype, shape, rng)
-    else:
-      # cast const to dtype, then create array
-      try:
-        cast_val = cast_const_to_dtype(const_val, dtype)
-      except Exception as e:
-        raise SystemExit(
-            f"Cannot cast constant '{const_val}' to dtype {dtype}: {e}")
-      arr = np.full(shape, cast_val, dtype=dtype)
-
-    varname = names[i] if names is not None else f"arr{i}"
-    arrays[varname] = arr
-    print(
-        f"Prepared `{varname}`: spec={spec}, dtype={arr.dtype}, shape={arr.shape}")
-
-  # Save to npz
   try:
-    np.savez(args.out, **arrays)
-    print(f"Saved {len(arrays)} arrays to '{args.out}'")
+    generate_npz(tuple(args.specs), args.out, names=names, seed=args.seed)
   except Exception as e:
-    raise SystemExit(f"Failed saving to '{args.out}': {e}")
+    raise SystemExit(f"Error: {e}")
 
 
 if __name__ == "__main__":
