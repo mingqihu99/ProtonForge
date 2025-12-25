@@ -28,22 +28,27 @@ def load_arrays(path: str) -> List[Tuple[str, np.ndarray]]:
   base = os.path.basename(path)
   _, ext = os.path.splitext(path)
   ext = ext.lower()
-  if ext == ".npz":
-    try:
-      with np.load(path, allow_pickle=True) as data:
-        names = data.files
-        return [(name, data[name]) for name in names]
-    except Exception as e:
-      raise RuntimeError(f"Failed to load '{path}': {e}")
-  elif ext == ".npy":
-    try:
-      arr = np.load(path, allow_pickle=True)
-      return [(base, arr)]
-    except Exception as e:
-      raise RuntimeError(f"Failed to load '{path}': {e}")
-  else:
-    raise RuntimeError(
-        f"Unsupported extension '{ext}'; expected .npz or .npy")
+  try:
+    loaded = np.load(path, allow_pickle=True)
+    if isinstance(loaded, np.ndarray):
+      if ext != ".npy":
+        raise RuntimeError(
+            f"File '{path}' has .npy content but extension is '{ext}'; expected .npy")
+      return [(base, loaded)]
+    elif hasattr(loaded, "files"):
+      # NpzFile
+      if ext != ".npz":
+        loaded.close()
+        raise RuntimeError(
+            f"File '{path}' has .npz content but extension is '{ext}'; expected .npz")
+      names = loaded.files
+      result = [(name, loaded[name]) for name in names]
+      loaded.close()
+      return result
+    else:
+      raise RuntimeError(f"Unexpected loaded type for '{path}': {type(loaded)}")
+  except Exception as e:
+    raise RuntimeError(f"Failed to load '{path}': {e}")
 
 
 def format_elem(x, dtype):
@@ -80,8 +85,16 @@ def format_number(x: float) -> str:
   return f"{v:.12g}"
 
 
-def near(a: float, b: float, atol: float = 1e-8, rtol: float = 1e-5) -> bool:
+def near(
+    a: float,
+    b: float,
+    atol: Optional[float] = None,
+        rtol: Optional[float] = None) -> bool:
   """Check if a is close to b using |a - b| < atol + rtol * |b|."""
+  if atol is None:
+    atol = 1e-8
+  if rtol is None:
+    rtol = 1e-5
   return abs(a - b) < atol + rtol * abs(b)
 
 
