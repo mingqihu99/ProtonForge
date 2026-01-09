@@ -8,16 +8,16 @@ Spec format examples:
   u8[64,64]             -> uint8 random array shape (64,64)
 
 CLI:
-  python generate_npz.py out.npz SPEC [SPEC ...] [--names name1,name2] [--seed N]
+  python generate_npz.py SPEC [SPEC ...] [-o data.npz] [--names name1,name2] [--seed N]
+  python generate_npz.py --hlo module.txt [--ranges RANGES] [-o data.npz]
 
-If --names is omitted, variable names default to arr0, arr1, ...
+If --names is omitted, variable names default to arr0, arr1, ... (or names from HLO).
 """
 
 import argparse
 import re
 import ast
 import numpy as np
-import sys
 from typing import Tuple, Optional, Any
 
 
@@ -40,6 +40,60 @@ DTYPE_MAP = {
 SPEC_RE = re.compile(
     r"^(?P<dtype>[a-z0-9]+)\[(?P<shape>[0-9,\s]+)\](?:\((?P<const>.*)\))?$",
     re.IGNORECASE)
+
+
+def extract_hlo_specs(hlo_module_path: str):
+  """Extracts shape specs and names from the ENTRY line of an HLO module file."""
+  with open(hlo_module_path, "r") as f:
+    content = f.read()
+
+  # Find the ENTRY computation block
+  # Format: ENTRY %name (Arg_0: f32[...], Arg_1: ...) -> ...
+  entry_match = re.search(r"ENTRY\s+%[\w.]+\s*\((.*?)\)\s*->", content)
+  if not entry_match:
+    return [], []
+
+  params_str = entry_match.group(1)
+  # Find all "name: shape" pairs
+  matches = re.findall(r"([\w.]+):\s+([a-z0-9]+\[[0-9, ]+\])", params_str)
+  if matches:
+    names = [m[0] for m in matches]
+    specs = [m[1] for m in matches]
+    return specs, names
+  else:
+    # Fallback to just shapes if names are missing
+    specs = re.findall(r"[a-z0-9]+\[[0-9, ]+\]", params_str)
+    return specs, []
+
+
+def merge_range_specs(base_specs: list[str], range_specs: Optional[str]) -> list[str]:
+  """Merges base shape specs with range/constant specs."""
+  if not range_specs:
+    return base_specs
+
+  # Work on a copy
+  final_specs = list(base_specs)
+
+  # 1) Try indexed format: "0:(-1,1) 3:(-3,3)"
+  indexed_matches = re.findall(r"(\d+):\((.*?)\)", range_specs)
+  if indexed_matches:
+    for idx_str, range_val in indexed_matches:
+      idx = int(idx_str)
+      if 0 <= idx < len(final_specs):
+        if range_val.strip():
+          final_specs[idx] = f"{final_specs[idx]}({range_val})"
+    return final_specs
+
+  # 2) Try sequential format: "(-1,1) () (-3,3)"
+  sequential_matches = re.findall(r"\((.*?)\)", range_specs)
+  if sequential_matches:
+    for i, range_val in enumerate(sequential_matches):
+      if i < len(final_specs):
+        if range_val.strip():
+          final_specs[i] = f"{final_specs[i]}({range_val})"
+    return final_specs
+
+  return final_specs
 
 
 def parse_spec(spec: str):
@@ -122,16 +176,36 @@ def cast_const_to_dtype(val: Any, dtype: np.dtype) -> Any:
     return dtype.type(float(val))
 
 
-def generate_npz(specs: Tuple[str, ...], output_path: str,
-                 names: Optional[Tuple[str, ...]] = None, seed: Optional[int] = None):
-  """Generate and save NPZ file from specs.
+def generate_npz(specs: Optional[Tuple[str, ...]] = None,
+                 output_path: str = "data.npz",
+                 names: Optional[Tuple[str, ...]] = None,
+                 seed: Optional[int] = None,
+                 hlo_module_path: Optional[str] = None,
+                 range_specs: Optional[str] = None):
+  """Generate and save NPZ file from specs or HLO module.
 
   Args:
     specs: Tuple of spec strings.
     output_path: Path to save the .npz file.
     names: Optional tuple of variable names.
     seed: Optional random seed.
+    hlo_module_path: Optional path to HLO module to extract shapes from.
+    range_specs: Optional range specifications to merge with HLO shapes.
   """
+  if hlo_module_path:
+    base_specs, hlo_names = extract_hlo_specs(hlo_module_path)
+    if not base_specs:
+      raise ValueError(f"No input shapes found in HLO module: {hlo_module_path}")
+
+    final_specs = merge_range_specs(base_specs, range_specs)
+    specs = tuple(final_specs)
+
+    # If explicit names not provided, use extracted HLO names
+    if names is None and hlo_names:
+      names = tuple(hlo_names)
+
+  if specs is None:
+    raise ValueError("Must provide either 'specs' or 'hlo_module_path'")
   if names is not None and len(names) != len(specs):
     raise ValueError(
         f"Number of names ({len(names)}) must match number of specs ({len(specs)})")
@@ -176,9 +250,14 @@ def generate_npz(specs: Tuple[str, ...], output_path: str,
 def main(argv=None):
   parser = argparse.ArgumentParser(
       description="Generate .npz files from concise specs")
-  parser.add_argument("out", help="Output .npz path")
-  parser.add_argument("specs", nargs="+",
+  parser.add_argument("specs", nargs="*",
                       help="One or more specs like s32[10,20](1) or f32[5]")
+  parser.add_argument(
+      "--hlo", help="Path to HLO module to extract shapes of inputs")
+  parser.add_argument(
+      "--ranges", help="Range specs for HLO inputs (sequential or id:range)")
+  parser.add_argument("-o", "--out", default="data.npz",
+                      help="Output .npz path (default: data.npz)")
   parser.add_argument(
       "--names", help="Comma-separated variable names (optional)")
   parser.add_argument("--seed", type=int, default=None,
@@ -191,7 +270,12 @@ def main(argv=None):
     names = tuple(n.strip() for n in args.names.split(",") if n.strip())
 
   try:
-    generate_npz(tuple(args.specs), args.out, names=names, seed=args.seed)
+    generate_npz(tuple(args.specs) if args.specs else None,
+                 args.out,
+                 names=names,
+                 seed=args.seed,
+                 hlo_module_path=args.hlo,
+                 range_specs=args.ranges)
   except Exception as e:
     raise SystemExit(f"Error: {e}")
 
