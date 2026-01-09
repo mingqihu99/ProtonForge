@@ -8,7 +8,7 @@ A collection of utilities for generating and comparing NumPy .npz/.npy files.
 ```python compare_npz.py GOLDEN_FILE TEST_FILE [OPTIONS]```
 
 ### generate_npz.py
-```python generate_npz.py OUTPUT_FILE SPEC [SPEC ...] [OPTIONS]```
+```python generate_npz.py [SPEC ...] [-o OUTPUT_FILE] [--hlo HLO_FILE] [OPTIONS]```
 
 ## Description
 
@@ -16,7 +16,7 @@ This tool contains Python scripts for working with NumPy array files (.npz and .
 
 - **compare_npz.py**: Compares two .npz/.npy files (golden reference first) and reports errors including mean absolute error (MAE), mean relative error (MRE), and pass rate using configurable tolerances.
 
-- **generate_npz.py**: Generates .npz files from concise specifications, supporting various data types and shapes with optional constant values or random initialization.
+- **generate_npz.py**: Generates .npz files from concise specifications or by automatically extracting input shapes from an HLO module text file. Supports various data types, constants, and random ranges.
 
 ## Options
 
@@ -28,7 +28,10 @@ This tool contains Python scripts for working with NumPy array files (.npz and .
 - `-h, --help` Show help message and exit
 
 ### generate_npz.py options
-- `--names NAME1,NAME2,...` Variable names for arrays (default: arr0, arr1, ...)
+- `-o, --out PATH` Output .npz path (default: data.npz)
+- `--hlo PATH` Path to HLO module to extract shapes of inputs
+- `--ranges SPEC` Range specs for HLO inputs (sequential `"(min,max) ()"` or indexed `"0:(min,max)"`)
+- `--names NAME1,NAME2,...` Variable names for arrays (overrides HLO names if provided)
 - `--seed N` Random seed for reproducible random arrays
 - `-h, --help` Show help message and exit
 
@@ -82,26 +85,50 @@ from compare_npz import allclose
 allclose("golden.npz", "test.npz", 1e-5)
 ```
 
-### Generate a .npz file with multiple arrays
+---
+
+### Generate a .npz file with specs
 ```
-python generate_npz.py output.npz f32[1024,512](0.0) s32[256](1) u8[64,64]
+python generate_npz.py f32[1024,512](0.0) s32[256](1) u8[64,64]
 ```
 
-### Generate a .npz file with given range
+### Generate a .npz file with specs with given range
 ```
-python generate_npz.py output.npz f32[10](-1.5,1.5)
+python generate_npz.py f32[10](-1.5,1.5)
+```
+
+### Generate from HLO module
+Automatically extract shapes and names from an HLO entry computation:
+```bash
+python generate_npz.py --hlo hloIR.txt
+```
+
+### Generate from HLO module with given range
+Use sequential ranges (follows HLO input order, `()` to skip):
+```bash
+python generate_npz.py --hlo hloIR.txt --ranges "() (-1,1)"
+```
+Or use indexed ranges:
+```bash
+python generate_npz.py --hlo hloIR.txt --ranges "1:(-1,1)"
 ```
 
 ### Generate with custom names
 ```
-python generate_npz.py data.npz f32[100](0.5) f16[50] --names input_0,input_1
+python generate_npz.py f32[100](0.5) f16[50] --names input_0,input_1
 ```
 
 ### Library usage in python
-```
+```python
 from generate_npz import generate_npz
+
+# Using specs
 specs = ("f32[1024,512](-1,1)", "s32[256](1)", "u8[64,64]")
 output_path = "test_output.npz"
 names = ("a", "b", "c")
 generate_npz(specs, output_path, names=names)
+
+# Using hlo module
+names = ("input_0", "input_1")
+generate_npz(hlo_module_path="hloIR.txt", names=names)
 ```
