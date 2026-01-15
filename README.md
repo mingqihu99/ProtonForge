@@ -32,6 +32,7 @@ This tool contains Python scripts for working with NumPy array files (.npz and .
 - `--hlo PATH` Path to HLO module to extract shapes of inputs
 - `--ranges SPEC` Range specs for HLO inputs (sequential `"(min,max) ()"` or indexed `"0:(min,max)"`)
 - `--names NAME1,NAME2,...` Variable names for arrays (overrides HLO names if provided)
+- `--name_pattern {ir_args_name, input_x}` Extract names from HLO module (default: input_x)
 - `--seed N` Random seed for reproducible random arrays
 - `-h, --help` Show help message and exit
 
@@ -43,9 +44,9 @@ python compare_npz.py golden.npz test.npz  # use default atol, rtol
 ```
 
 ### Compare with custom tolerances
-```
+```bash
 python compare_npz.py golden.npz test.npz --atol 1e-5 --rtol 1e-5
-OR
+# OR
 python compare_npz.py golden.npz test.npz --atol 1e-5  # means rtol is zero, only cares atol
 ```
 
@@ -114,8 +115,9 @@ python generate_npz.py --hlo hloIR.txt --ranges "1:(-1,1)"
 ```
 
 ### Generate with custom names
-```
+```bash
 python generate_npz.py f32[100](0.5) f16[50] --names input_0,input_1
+# If --names is omitted, variable names default to input_0, input_1, ...
 ```
 
 ### Library usage in python
@@ -131,4 +133,8 @@ generate_npz(specs, output_path, names=names)
 # Using hlo module
 names = ("input_0", "input_1")
 generate_npz(hlo_module_path="hloIR.txt", names=names)
+# OR
+generate_npz(hlo_module_path="hloIR.txt")  # default name_pattern=input_x
+# OR
+generate_npz(hlo_module_path="hloIR.txt", name_pattern="ir_args_name")  # extract names from hloIR.txt
 ```

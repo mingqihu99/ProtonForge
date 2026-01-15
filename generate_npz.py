@@ -9,9 +9,10 @@ Spec format examples:
 
 CLI:
   python generate_npz.py SPEC [SPEC ...] [-o data.npz] [--names name1,name2] [--seed N]
-  python generate_npz.py --hlo module.txt [--ranges RANGES] [-o data.npz]
+  python generate_npz.py --hlo module.txt [--ranges RANGES] [-o data.npz] [--name_pattern ir_args_name]
 
-If --names is omitted, variable names default to arr0, arr1, ... (or names from HLO).
+If --names is omitted, variable names default to input_0, input_1, ...
+or extracted HLO names if --name_pattern=ir_args_name is used.
 """
 
 import argparse
@@ -48,8 +49,8 @@ def extract_hlo_specs(hlo_module_path: str):
     content = f.read()
 
   # Find the ENTRY computation block
-  # Format: ENTRY %name (Arg_0: f32[...], Arg_1: ...) -> ...
-  entry_match = re.search(r"ENTRY\s+%[\w.]+\s*\((.*?)\)\s*->", content)
+  # Format: ENTRY name (Arg_0: f32[...], Arg_1: ...) -> ...
+  entry_match = re.search(r"ENTRY\s+%?[\w.]+\s*\((.*?)\)\s*->", content)
   if not entry_match:
     return [], []
 
@@ -181,7 +182,8 @@ def generate_npz(specs: Optional[Tuple[str, ...]] = None,
                  names: Optional[Tuple[str, ...]] = None,
                  seed: Optional[int] = None,
                  hlo_module_path: Optional[str] = None,
-                 range_specs: Optional[str] = None):
+                 range_specs: Optional[str] = None,
+                 name_pattern: str = "input_x"):
   """Generate and save NPZ file from specs or HLO module.
 
   Args:
@@ -191,7 +193,10 @@ def generate_npz(specs: Optional[Tuple[str, ...]] = None,
     seed: Optional random seed.
     hlo_module_path: Optional path to HLO module to extract shapes from.
     range_specs: Optional range specifications to merge with HLO shapes.
+    name_pattern: Name pattern to use if 'names' is not provided.
+                  'input_x' (default) or 'ir_args_name'.
   """
+  hlo_names = []
   if hlo_module_path:
     base_specs, hlo_names = extract_hlo_specs(hlo_module_path)
     if not base_specs:
@@ -206,7 +211,14 @@ def generate_npz(specs: Optional[Tuple[str, ...]] = None,
 
   if specs is None:
     raise ValueError("Must provide either 'specs' or 'hlo_module_path'")
-  if names is not None and len(names) != len(specs):
+
+  if names is None:
+    if name_pattern == "ir_args_name" and hlo_names:
+      names = tuple(hlo_names)
+    else:
+      names = tuple(f"input_{i}" for i in range(len(specs)))
+
+  if len(names) != len(specs):
     raise ValueError(
         f"Number of names ({len(names)}) must match number of specs ({len(specs)})")
 
@@ -236,7 +248,7 @@ def generate_npz(specs: Optional[Tuple[str, ...]] = None,
         raise ValueError(f"Cannot cast constant '{const_val}' to dtype {dtype}: {e}")
       arr = np.full(shape, cast_val, dtype=dtype)
 
-    varname = names[i] if names is not None else f"arr{i}"
+    varname = names[i]
     arrays[varname] = arr
     print(f"Prepared `{varname}`: spec={spec}, dtype={arr.dtype}, shape={arr.shape}")
 
@@ -260,6 +272,9 @@ def main(argv=None):
                       help="Output .npz path (default: data.npz)")
   parser.add_argument(
       "--names", help="Comma-separated variable names (optional)")
+  parser.add_argument(
+      "--name_pattern", choices=["input_x", "ir_args_name"], default="input_x",
+      help="Variable naming pattern if --names is not provided (default: input_x)")
   parser.add_argument("--seed", type=int, default=None,
                       help="Random seed (optional)")
 
@@ -275,7 +290,8 @@ def main(argv=None):
                  names=names,
                  seed=args.seed,
                  hlo_module_path=args.hlo,
-                 range_specs=args.ranges)
+                 range_specs=args.ranges,
+                 name_pattern=args.name_pattern)
   except Exception as e:
     raise SystemExit(f"Error: {e}")
 
