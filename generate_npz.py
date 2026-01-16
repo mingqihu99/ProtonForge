@@ -205,10 +205,6 @@ def generate_npz(specs: Optional[Tuple[str, ...]] = None,
     final_specs = merge_range_specs(base_specs, range_specs)
     specs = tuple(final_specs)
 
-    # If explicit names not provided, use extracted HLO names
-    if names is None and hlo_names:
-      names = tuple(hlo_names)
-
   if specs is None:
     raise ValueError("Must provide either 'specs' or 'hlo_module_path'")
 
