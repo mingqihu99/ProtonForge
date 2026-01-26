@@ -2,6 +2,7 @@
 """Generate .npz files from concise specs.
 
 Spec format examples:
+  s32[]                 -> int32 scalar
   s32[2048,16,128](1)   -> int32 array shape (2048,16,128) filled with 1
   f32[10](0.5)          -> float32 vector of length 10 filled with 0.5
   f32[10](-1.5,1.5)     -> float32 random array in range [-1.5, 1.5]
@@ -39,7 +40,7 @@ DTYPE_MAP = {
 }
 
 SPEC_RE = re.compile(
-    r"^(?P<dtype>[a-z0-9]+)\[(?P<shape>[0-9,\s]+)\](?:\((?P<const>.*)\))?$",
+    r"^(?P<dtype>[a-z0-9]+)\[(?P<shape>[0-9,\s]*)\](?:\((?P<const>.*)\))?$",
     re.IGNORECASE)
 
 
@@ -56,14 +57,14 @@ def extract_hlo_specs(hlo_module_path: str):
 
   params_str = entry_match.group(1)
   # Find all "name: shape" pairs
-  matches = re.findall(r"([\w.]+):\s+([a-z0-9]+\[[0-9, ]+\])", params_str)
+  matches = re.findall(r"([\w.]+):\s+([a-z0-9]+\[[0-9, ]*\])", params_str)
   if matches:
     names = [m[0] for m in matches]
     specs = [m[1] for m in matches]
     return specs, names
   else:
     # Fallback to just shapes if names are missing
-    specs = re.findall(r"[a-z0-9]+\[[0-9, ]+\]", params_str)
+    specs = re.findall(r"[a-z0-9]+\[[0-9, ]*\]", params_str)
     return specs, []
 
 
